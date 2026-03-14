@@ -1,0 +1,143 @@
+package auth
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
+)
+
+// ErrInvalidCredentials は識別子またはパスワードが不正なときに返す。
+var ErrInvalidCredentials = errors.New("invalid credentials")
+
+// Service はログイン認証とトークン発行を担当する。
+type Service struct {
+	db           *pgxpool.Pool
+	jwtSecret    []byte
+	jwtExpiresIn time.Duration
+}
+
+// LoginInput はログイン要求の入力値。
+type LoginInput struct {
+	Identifier string
+	Password   string
+}
+
+// LoginResult はログイン成功時に呼び出し元へ返す認証結果。
+type LoginResult struct {
+	UserID     string `json:"user_id"`
+	Role       string `json:"role"`
+	Token      string `json:"token"`
+	ExpiresAt  string `json:"expires_at"`
+	EmployeeID string `json:"employee_id"`
+	Email      string `json:"email"`
+}
+
+type userRecord struct {
+	ID           string
+	EmployeeID   string
+	Email        string
+	Role         string
+	PasswordHash string
+}
+
+// NewService は認証サービスを生成する。
+func NewService(db *pgxpool.Pool, jwtSecret string, jwtExpiresIn time.Duration) *Service {
+	return &Service{
+		db:           db,
+		jwtSecret:    []byte(jwtSecret),
+		jwtExpiresIn: jwtExpiresIn,
+	}
+}
+
+// Login は identifier（メール/社員ID）とパスワードを検証し、JWT を発行する。
+func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
+	identifier := strings.TrimSpace(in.Identifier)
+	if identifier == "" || in.Password == "" {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	var user userRecord
+	// identifier はメールアドレス/社員ID のどちらでも一致させる。
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, employee_id, email, role::text, password_hash
+		FROM users
+		WHERE status = 'ACTIVE'
+		  AND (email = $1 OR employee_id = $1)
+		LIMIT 1
+	`, identifier).Scan(
+		&user.ID,
+		&user.EmployeeID,
+		&user.Email,
+		&user.Role,
+		&user.PasswordHash,
+	)
+	if err != nil {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	// ユーザー保存済みのハッシュと入力パスワードを照合する。
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(in.Password)); err != nil {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(s.jwtExpiresIn)
+	// MVP はシンプルな HS256 署名トークンを採用する。
+	token, err := buildJWT(s.jwtSecret, user.ID, user.Role, expiresAt)
+	if err != nil {
+		return LoginResult{}, fmt.Errorf("token build failed: %w", err)
+	}
+
+	return LoginResult{
+		UserID:     user.ID,
+		Role:       user.Role,
+		Token:      token,
+		ExpiresAt:  expiresAt.Format(time.RFC3339),
+		EmployeeID: user.EmployeeID,
+		Email:      user.Email,
+	}, nil
+}
+
+// buildJWT は HS256 署名付き JWT を生成する。
+func buildJWT(secret []byte, userID, role string, expiresAt time.Time) (string, error) {
+	header := map[string]string{
+		"alg": "HS256",
+		"typ": "JWT",
+	}
+	payload := map[string]any{
+		"sub":  userID,
+		"role": role,
+		"exp":  expiresAt.Unix(),
+	}
+
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return "", err
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	h := base64.RawURLEncoding.EncodeToString(headerJSON)
+	p := base64.RawURLEncoding.EncodeToString(payloadJSON)
+	unsigned := h + "." + p
+
+	// header.payload へ HMAC-SHA256 署名を付与する。
+	mac := hmac.New(sha256.New, secret)
+	if _, err := mac.Write([]byte(unsigned)); err != nil {
+		return "", err
+	}
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+
+	return unsigned + "." + signature, nil
+}
