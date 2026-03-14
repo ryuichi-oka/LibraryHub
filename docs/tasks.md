@@ -11,7 +11,7 @@
 - [x] T-003 `DONE` 日時処理のタイムゾーン方針を実装ルールとして定義する（成果物: `docs/development/datetime-guidelines.md`）（対応: NFR-005）
 - [x] T-004 `DONE` 監査ログの共通出力方針を定義する（成果物: `docs/development/audit-log-guidelines.md`）（対応: NFR-003, FR-051）
 - [x] T-006 `DONE` Git運用ルール（Issue/Branch/PR/ラベル/テンプレート）を定義する（成果物: `docs/development/git-guidelines.md`, `.github/ISSUE_TEMPLATE/*`, `.github/pull_request_template.md`）（対応: OPS-003）
-- [ ] T-005 `TODO` 開発環境を構築し、Docker経由で画面（Next.js）を起動できる状態にする（対応: OPS-003）
+- [x] T-005 `DONE` 開発環境を構築し、Docker経由で画面（Next.js）を起動できる状態にする（成果物: `docker-compose.yml`, `infra/docker/*`, `apps/web`, `infra/nginx/conf.d/default.conf`, `.env.example`）（対応: OPS-003）
 
 ## 2. 認証・権限（MVP）
 - [ ] T-010 `DONE` 独自ログイン（メールアドレスまたは社員ID + パスワード）を実装する（成果物: `apps/api` の `/auth/login`）（対応: FR-001, FR-004, CA-007）
