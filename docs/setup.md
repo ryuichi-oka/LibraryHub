@@ -47,12 +47,9 @@ cp .env.example .env
 APP_ENV=local
 APP_TIMEZONE=Asia/Tokyo
 APP_PORT=3000
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=libraryhub
-DB_USER=libraryhub
-DB_PASSWORD=libraryhub
-DATABASE_URL=postgres://libraryhub:libraryhub@db:5432/libraryhub?sslmode=disable
+POSTGRES_DB=libraryhub
+POSTGRES_USER=libraryhub
+POSTGRES_PASSWORD=libraryhub
 JWT_SECRET=change-this-in-dev
 JWT_EXPIRES_HOURS=24
 ```
@@ -64,7 +61,7 @@ docker compose ps
 ```
 
 サービス想定:
-- `next`: Next.js フロントエンド
+- `web`: Next.js フロントエンド
 - `api`: Go API
 - `nginx`: リバースプロキシ
 - `db`: PostgreSQL
@@ -73,7 +70,8 @@ docker compose ps
 - Git 操作ができること
 - `.env` が配置済みであること
 - `docker compose ps` で主要コンテナが `Up` であること
-- `http://localhost` へアクセスできること（Nginx経由）
+- `http://localhost` へアクセスできること（Nginx経由で Next.js 画面が表示される）
+- `http://localhost/api/healthz` で API のヘルスが確認できること
 - タイムゾーン設定が `Asia/Tokyo` であること
 
 ## 5. チェックリスト

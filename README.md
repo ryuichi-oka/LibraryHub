@@ -15,15 +15,21 @@ LibraryHub は、蔵書の管理や検索、利用状況の把握をしやすく
 LibraryHub/
 ├── README.md
 ├── AGENTS.md
+├── .env.example
+├── docker-compose.yml
 ├── apps/
 │   ├── api/
+│       ├── README.md
 │       ├── cmd/server/main.go
 │       ├── internal/
 │       └── go.mod
 │   └── web/
-│       └── README.md
+│       ├── app/
+│       └── package.json
 ├── infra/
 │   ├── docker/
+│   │   ├── api/Dockerfile
+│   │   ├── web/Dockerfile
 │   │   └── README.md
 │   └── nginx/
 │       ├── conf.d/default.conf
@@ -46,6 +52,8 @@ LibraryHub/
 
 - [README.md](./README.md): プロジェクトの入口。概要と構造を簡潔にまとめる
 - [AGENTS.md](./AGENTS.md): AI エージェント向けの作業ルールと利用可能スキルの案内
+- [.env.example](./.env.example): ローカル開発用の環境変数テンプレート
+- [docker-compose.yml](./docker-compose.yml): Next.js / Go / Nginx / PostgreSQL の起動定義
 - [apps/api](./apps/api): Go製 API（`/auth/login`, `/healthz`）
 - [apps/web](./apps/web): Next.js フロントエンドアプリ配置場所
 - [infra](./infra): Nginx と Docker 関連のインフラ設定
