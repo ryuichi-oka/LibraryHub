@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,9 +21,19 @@ var ErrInvalidCredentials = errors.New("invalid credentials")
 // ErrInvalidToken は JWT の形式・署名・有効期限が不正なときに返す。
 var ErrInvalidToken = errors.New("invalid token")
 
+// ErrInvalidUserStatus は許可されていないユーザー状態が指定されたときに返す。
+var ErrInvalidUserStatus = errors.New("invalid user status")
+
+// ErrUserNotFound は対象ユーザーが見つからないときに返す。
+var ErrUserNotFound = errors.New("user not found")
+
+type dbQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // Service はログイン認証とトークン発行を担当する。
 type Service struct {
-	db           *pgxpool.Pool
+	db           dbQuerier
 	jwtSecret    []byte
 	jwtExpiresIn time.Duration
 }
@@ -58,8 +69,26 @@ type Claims struct {
 	ExpiresAt time.Time
 }
 
+// UpdateUserStatusInput は管理者による利用者状態切り替えの入力値。
+type UpdateUserStatusInput struct {
+	UserID string
+	Status string
+}
+
+// UpdateUserStatusResult は状態更新後に返す利用者情報。
+type UpdateUserStatusResult struct {
+	UserID    string `json:"user_id"`
+	Status    string `json:"status"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 // NewService は認証サービスを生成する。
 func NewService(db *pgxpool.Pool, jwtSecret string, jwtExpiresIn time.Duration) *Service {
+	return newService(db, jwtSecret, jwtExpiresIn)
+}
+
+// newService はテスト差し替え可能な DB 依存で認証サービスを生成する。
+func newService(db dbQuerier, jwtSecret string, jwtExpiresIn time.Duration) *Service {
 	return &Service{
 		db:           db,
 		jwtSecret:    []byte(jwtSecret),
@@ -119,6 +148,45 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 // ParseToken は Bearer トークンの署名と有効期限を検証する。
 func (s *Service) ParseToken(token string) (Claims, error) {
 	return parseJWT(s.jwtSecret, token, time.Now())
+}
+
+// UpdateUserStatus は対象ユーザーの有効/無効状態を更新する。
+func (s *Service) UpdateUserStatus(ctx context.Context, in UpdateUserStatusInput) (UpdateUserStatusResult, error) {
+	userID := strings.TrimSpace(in.UserID)
+	status := strings.ToUpper(strings.TrimSpace(in.Status))
+	// 空値や許可外ステータスは DB 更新前に入力エラーとして扱う。
+	if userID == "" || !isSupportedUserStatus(status) {
+		return UpdateUserStatusResult{}, ErrInvalidUserStatus
+	}
+
+	var updatedUser struct {
+		UserID    string
+		Status    string
+		UpdatedAt time.Time
+	}
+
+	// users.status は ACTIVE/INACTIVE だけを許可し、更新結果をそのまま返す。
+	err := s.db.QueryRow(ctx, `
+		UPDATE users
+		SET status = $2::user_status_type,
+		    updated_at = NOW()
+		WHERE id = $1::uuid
+		RETURNING id::text, status::text, updated_at
+	`, userID, status).Scan(
+		&updatedUser.UserID,
+		&updatedUser.Status,
+		&updatedUser.UpdatedAt,
+	)
+	if err != nil {
+		// MVP では詳細理由を分けず、更新不可を「対象なし」として統一する。
+		return UpdateUserStatusResult{}, ErrUserNotFound
+	}
+
+	return UpdateUserStatusResult{
+		UserID:    updatedUser.UserID,
+		Status:    updatedUser.Status,
+		UpdatedAt: updatedUser.UpdatedAt.Format(time.RFC3339),
+	}, nil
 }
 
 // buildJWT は HS256 署名付き JWT を生成する。
@@ -208,4 +276,14 @@ func parseJWT(secret []byte, token string, now time.Time) (Claims, error) {
 		Role:      payload.Role,
 		ExpiresAt: expiresAt,
 	}, nil
+}
+
+// isSupportedUserStatus は API で受け付ける利用者状態を判定する。
+func isSupportedUserStatus(status string) bool {
+	switch status {
+	case "ACTIVE", "INACTIVE":
+		return true
+	default:
+		return false
+	}
 }

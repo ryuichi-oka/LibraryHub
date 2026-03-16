@@ -1,8 +1,12 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestBuildJWTAndParseToken(t *testing.T) {
@@ -65,4 +69,108 @@ func TestParseJWTRejectsInvalidToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateUserStatus(t *testing.T) {
+	t.Parallel()
+
+	updatedAt := time.Date(2026, 3, 18, 9, 30, 0, 0, time.UTC)
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, args ...any) pgx.Row {
+			if got, want := args[0], "user-2"; got != want {
+				t.Fatalf("user id = %v, want %v", got, want)
+			}
+			if got, want := args[1], "INACTIVE"; got != want {
+				t.Fatalf("status = %v, want %v", got, want)
+			}
+			return fakeRow{
+				values: []any{"user-2", "INACTIVE", updatedAt},
+			}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	result, err := service.UpdateUserStatus(context.Background(), UpdateUserStatusInput{
+		UserID: "user-2",
+		Status: "inactive",
+	})
+	if err != nil {
+		t.Fatalf("UpdateUserStatus() error = %v", err)
+	}
+
+	if result.UserID != "user-2" {
+		t.Fatalf("result.UserID = %q, want %q", result.UserID, "user-2")
+	}
+	if result.Status != "INACTIVE" {
+		t.Fatalf("result.Status = %q, want %q", result.Status, "INACTIVE")
+	}
+	if result.UpdatedAt != updatedAt.Format(time.RFC3339) {
+		t.Fatalf("result.UpdatedAt = %q, want %q", result.UpdatedAt, updatedAt.Format(time.RFC3339))
+	}
+}
+
+func TestUpdateUserStatusRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{}, "libraryhub-secret", time.Hour)
+
+	_, err := service.UpdateUserStatus(context.Background(), UpdateUserStatusInput{
+		UserID: "user-2",
+		Status: "disabled",
+	})
+	if err != ErrInvalidUserStatus {
+		t.Fatalf("UpdateUserStatus() error = %v, want %v", err, ErrInvalidUserStatus)
+	}
+}
+
+func TestUpdateUserStatusReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{err: errors.New("no rows")}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	_, err := service.UpdateUserStatus(context.Background(), UpdateUserStatusInput{
+		UserID: "user-404",
+		Status: "ACTIVE",
+	})
+	if err != ErrUserNotFound {
+		t.Fatalf("UpdateUserStatus() error = %v, want %v", err, ErrUserNotFound)
+	}
+}
+
+type fakeDB struct {
+	queryRowFunc func(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (db fakeDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if db.queryRowFunc == nil {
+		return fakeRow{err: errors.New("unexpected query")}
+	}
+	return db.queryRowFunc(ctx, sql, args...)
+}
+
+type fakeRow struct {
+	values []any
+	err    error
+}
+
+func (r fakeRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+
+	for i := range dest {
+		switch d := dest[i].(type) {
+		case *string:
+			*d = r.values[i].(string)
+		case *time.Time:
+			*d = r.values[i].(time.Time)
+		default:
+			return errors.New("unsupported scan destination")
+		}
+	}
+
+	return nil
 }

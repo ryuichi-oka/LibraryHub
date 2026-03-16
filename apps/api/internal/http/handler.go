@@ -14,7 +14,13 @@ import (
 
 // Handler は認証関連エンドポイントを提供する HTTP ハンドラー。
 type Handler struct {
-	authService *auth.Service
+	authService authService
+}
+
+type authService interface {
+	Login(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error)
+	ParseToken(token string) (auth.Claims, error)
+	UpdateUserStatus(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error)
 }
 
 type contextKey string
@@ -22,7 +28,7 @@ type contextKey string
 const authClaimsContextKey contextKey = "authClaims"
 
 // NewHandler は HTTP ルーティングで利用するハンドラーを生成する。
-func NewHandler(authService *auth.Service) *Handler {
+func NewHandler(authService authService) *Handler {
 	return &Handler{authService: authService}
 }
 
@@ -45,12 +51,23 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/me", h.me)
 	})
 
+	r.Route("/admin/users", func(r chi.Router) {
+		// ユーザー有効/無効切替は管理者だけに限定する。
+		r.Use(h.requireAuth)
+		r.Use(h.requireRoles("ADMIN"))
+		r.Post("/{userId}/status", h.updateUserStatus)
+	})
+
 	return r
 }
 
 type loginRequest struct {
 	Identifier string `json:"identifier"`
 	Password   string `json:"password"`
+}
+
+type updateUserStatusRequest struct {
+	Status string `json:"status"`
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +122,42 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// updateUserStatus は管理者による利用者の有効/無効切り替えを受け付ける。
+func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
+	var req updateUserStatusRequest
+	// 管理者操作でも JSON が壊れていれば業務処理へ進めない。
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := h.authService.UpdateUserStatus(r.Context(), auth.UpdateUserStatusInput{
+		UserID: chi.URLParam(r, "userId"),
+		Status: req.Status,
+	})
+	if err != nil {
+		// サービス層の業務エラーを HTTP ステータスへマッピングする。
+		switch err {
+		case auth.ErrInvalidUserStatus:
+			writeError(w, http.StatusBadRequest, "invalid user status")
+		case auth.ErrUserNotFound:
+			writeError(w, http.StatusNotFound, "user not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]string{
+			"id":         result.UserID,
+			"status":     result.Status,
+			"updated_at": result.UpdatedAt,
+		},
+	})
+}
+
+// requireAuth は Bearer トークンを検証し、認証情報を context に設定するミドルウェア。
 func (h *Handler) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Authorization: Bearer <token> の形式だけを受け付ける。
@@ -128,6 +181,7 @@ func (h *Handler) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// requireRoles は指定ロールだけに後続ハンドラーへのアクセスを許可する。
 func (h *Handler) requireRoles(roles ...string) func(http.Handler) http.Handler {
 	// 呼び出し時に許可ロール集合へ変換して、各リクエストで再利用する。
 	allowedRoles := make(map[string]struct{}, len(roles))
@@ -154,11 +208,13 @@ func (h *Handler) requireRoles(roles ...string) func(http.Handler) http.Handler 
 	}
 }
 
+// contextWithAuthClaims は認証済みユーザー情報をリクエスト文脈へ格納する。
 func contextWithAuthClaims(ctx context.Context, claims auth.Claims) context.Context {
 	// request 単位で認証済みユーザー情報を受け渡す。
 	return context.WithValue(ctx, authClaimsContextKey, claims)
 }
 
+// authClaimsFromContext は文脈に保存された認証情報を取り出す。
 func authClaimsFromContext(r *http.Request) (auth.Claims, bool) {
 	// requireAuth が設定した認証情報を後続処理から取り出す。
 	claims, ok := r.Context().Value(authClaimsContextKey).(auth.Claims)
