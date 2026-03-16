@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ErrInvalidCredentials は識別子またはパスワードが不正なときに返す。
@@ -85,7 +84,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 	}
 
 	// ユーザー保存済みのハッシュと入力パスワードを照合する。
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(in.Password)); err != nil {
+	if !VerifyPasswordHash(user.PasswordHash, in.Password) {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
