@@ -1,10 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { clearAuthSession, isSessionExpired, loadAuthSession } from "../../../../../../_lib/authSession";
-import { LOGIN_PATH, USER_DEFAULT_PATH, canAccessPath } from "../../../../../../_lib/authorization";
 import styles from "./UserStatusScreen.module.css";
 import UserStatusFeedback from "./UserStatusFeedback";
 import UserStatusForm from "./UserStatusForm";
@@ -27,7 +25,6 @@ function formatErrorMessage(status: number, fallback: string): string {
 }
 
 export default function UserStatusScreen() {
-  const router = useRouter();
   const [adminToken, setAdminToken] = useState("");
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -108,18 +105,14 @@ export default function UserStatusScreen() {
   useEffect(() => {
     const session = loadAuthSession();
     if (!session) {
-      // 未ログインで管理者ページへ直リンクした場合はログイン画面へ戻す。
-      router.replace(LOGIN_PATH);
+      setErrorMessage("セッション情報を確認できませんでした。再ログインしてください。");
+      setIsSessionReady(true);
       return;
     }
     if (isSessionExpired(session.expiresAt)) {
       clearAuthSession();
-      router.replace(LOGIN_PATH);
-      return;
-    }
-    if (!canAccessPath(session.role, "/admin/users/status")) {
-      // 一般利用者が管理者ページへ直リンクした場合はトップへ戻す。
-      router.replace(USER_DEFAULT_PATH);
+      setErrorMessage("セッションの有効期限が切れました。再ログインしてください。");
+      setIsSessionReady(true);
       return;
     }
 
@@ -178,7 +171,7 @@ export default function UserStatusScreen() {
   }
 
   return (
-    <div className={`${styles.shell} min-h-screen bg-slate-50 px-5 py-8 sm:px-8`}>
+    <div className={`${styles.shell} py-3`}>
       <main className={`${styles.container} flex flex-col gap-4`}>
         <h1 className={styles.heading}>利用状態の変更</h1>
         <p className={styles.lead}>

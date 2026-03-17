@@ -1,0 +1,259 @@
+.shell {
+  min-height: 100vh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid #dbe2ea;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+  color: #1e3a8a;
+}
+
+.tagline {
+  margin: 0.08rem 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.topNav {
+  margin-top: 0.45rem;
+  border-top: 1px solid #bcd0ee;
+  border-bottom: 1px solid #bcd0ee;
+  background: #edf3fc;
+}
+
+.topNavLink {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.72rem;
+  padding: 0.52rem 0.92rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #475569;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.topNavLink:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.topNavLinkActive {
+  background: #cfe2ff;
+  color: #1e40af;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  padding: 0.3rem 0.66rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.menuButton {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.72rem;
+  background: #ffffff;
+  padding: 0.46rem 0.62rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.menuButton:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.menuIcon {
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  right: 1.25rem;
+  z-index: 40;
+  width: min(19rem, calc(100vw - 2.5rem));
+  border: 1px solid #dbe2ea;
+  border-radius: 0.86rem;
+  background: #ffffff;
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.12);
+  padding: 0.4rem;
+}
+
+.menuLink {
+  display: flex;
+  align-items: center;
+  border-radius: 0.6rem;
+  padding: 0.62rem 0.66rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.menuLink:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.logoutButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.72rem;
+  background: #ffffff;
+  padding: 0.46rem 0.62rem;
+  color: #334155;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.logoutButton:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.logoutIcon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.searchPanel {
+  border-radius: 1rem;
+  border: 1px solid #dbe2ea;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.9rem 0.82rem 0.96rem;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+}
+
+.searchAside {
+  align-self: flex-start;
+  margin-top: 1.05rem;
+}
+
+.searchTitle {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  color: #1e3a8a;
+  text-align: center;
+}
+
+.searchForm {
+  margin-top: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.86rem;
+}
+
+.searchLabel {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.searchInput {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.7rem;
+  padding: 0.62rem 0.72rem;
+  font-size: 0.92rem;
+  color: #1e293b;
+  background: #ffffff;
+}
+
+.searchInput:focus {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.categoryList {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.72rem;
+  background: #ffffff;
+  padding: 0.42rem 0.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.categoryItem {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+  border-radius: 0.5rem;
+  padding: 0.34rem 0.22rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.categoryItem input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: #2563eb;
+}
+
+.searchButton {
+  margin-top: 0.3rem;
+  border: 0;
+  border-radius: 0.72rem;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  padding: 0.66rem 0.78rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #ffffff;
+  transition: filter 0.15s ease;
+}
+
+.searchButton:hover {
+  filter: brightness(1.05);
+}
+
+@media (min-width: 768px) {
+  .searchPanel {
+    position: sticky;
+    top: 7.2rem;
+    max-height: calc(100vh - 8.4rem);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .searchForm {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .categoryList {
+    flex: 1;
+    min-height: 8.5rem;
+    max-height: none;
+  }
+
+  .searchButton {
+    margin-top: auto;
+  }
+}
