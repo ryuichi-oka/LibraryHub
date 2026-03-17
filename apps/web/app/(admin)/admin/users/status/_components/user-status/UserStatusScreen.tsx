@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { clearAuthSession, isSessionExpired, loadAuthSession } from "../../../../../../_lib/authSession";
+import { USER_DEFAULT_PATH, canAccessPath } from "../../../../../../_lib/authorization";
 import styles from "./UserStatusScreen.module.css";
 import UserStatusFeedback from "./UserStatusFeedback";
 import UserStatusForm from "./UserStatusForm";
@@ -25,6 +27,7 @@ function formatErrorMessage(status: number, fallback: string): string {
 }
 
 export default function UserStatusScreen() {
+  const router = useRouter();
   const [adminToken, setAdminToken] = useState("");
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -115,9 +118,10 @@ export default function UserStatusScreen() {
       setIsSessionReady(true);
       return;
     }
-    if (session.role !== "ADMIN") {
+    if (!canAccessPath(session.role, "/admin/users/status")) {
       setErrorMessage("この画面は管理者のみ利用できます。");
       setIsSessionReady(true);
+      router.replace(USER_DEFAULT_PATH);
       return;
     }
 

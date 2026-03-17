@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { saveAuthSession } from "../../../_lib/authSession";
+import { getDefaultPathByRole } from "../../../_lib/authorization";
 import BrandHeader from "./BrandHeader";
 import LoginFormCard from "./LoginFormCard";
 import styles from "./LoginScreen.module.css";
@@ -85,10 +86,7 @@ export default function LoginScreen() {
       });
       setLoginResult(data);
       setPassword("");
-
-      if (data.user.role === "ADMIN") {
-        router.push("/admin/users/status");
-      }
+      router.push(getDefaultPathByRole(data.user.role));
     } catch {
       setErrorMessage("ネットワークエラーが発生しました。接続状態を確認してください。");
     } finally {
