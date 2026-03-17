@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { clearAuthSession, isSessionExpired, loadAuthSession } from "../../../../../../_lib/authSession";
-import { USER_DEFAULT_PATH, canAccessPath } from "../../../../../../_lib/authorization";
+import { LOGIN_PATH, USER_DEFAULT_PATH, canAccessPath } from "../../../../../../_lib/authorization";
 import styles from "./UserStatusScreen.module.css";
 import UserStatusFeedback from "./UserStatusFeedback";
 import UserStatusForm from "./UserStatusForm";
@@ -108,19 +108,17 @@ export default function UserStatusScreen() {
   useEffect(() => {
     const session = loadAuthSession();
     if (!session) {
-      setErrorMessage("ログイン情報が見つかりません。ログイン画面からやり直してください。");
-      setIsSessionReady(true);
+      // 未ログインで管理者ページへ直リンクした場合はログイン画面へ戻す。
+      router.replace(LOGIN_PATH);
       return;
     }
     if (isSessionExpired(session.expiresAt)) {
       clearAuthSession();
-      setErrorMessage("ログインの有効期限が切れました。再ログインしてください。");
-      setIsSessionReady(true);
+      router.replace(LOGIN_PATH);
       return;
     }
     if (!canAccessPath(session.role, "/admin/users/status")) {
-      setErrorMessage("この画面は管理者のみ利用できます。");
-      setIsSessionReady(true);
+      // 一般利用者が管理者ページへ直リンクした場合はトップへ戻す。
       router.replace(USER_DEFAULT_PATH);
       return;
     }
@@ -129,6 +127,12 @@ export default function UserStatusScreen() {
     setIsSessionReady(true);
     void fetchUsers(session.token);
   }, []);
+
+  // セッション判定が終わるまで管理者画面本体を描画しない。
+  // これにより、一般利用者の直リンク時に一瞬だけ管理者UIが見える現象を防ぐ。
+  if (!isSessionReady) {
+    return null;
+  }
 
   // 保存済みの管理者セッションで status 更新 API を実行する。
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

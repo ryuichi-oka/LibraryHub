@@ -1,6 +1,7 @@
 export const ADMIN_ONLY_PATH_PREFIX = "/admin";
 export const ADMIN_DEFAULT_PATH = "/admin/users/status";
 export const USER_DEFAULT_PATH = "/home";
+export const LOGIN_PATH = "/";
 
 export function isAdminRole(role: string): boolean {
   return role === "ADMIN";
