@@ -29,6 +29,7 @@ var ErrUserNotFound = errors.New("user not found")
 
 type dbQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // Service はログイン認証とトークン発行を担当する。
@@ -80,6 +81,15 @@ type UpdateUserStatusResult struct {
 	UserID    string `json:"user_id"`
 	Status    string `json:"status"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+// AdminUser は管理者向けユーザー一覧の1件分を表す。
+type AdminUser struct {
+	UserID     string `json:"user_id"`
+	EmployeeID string `json:"employee_id"`
+	Email      string `json:"email"`
+	Role       string `json:"role"`
+	Status     string `json:"status"`
 }
 
 // NewService は認証サービスを生成する。
@@ -187,6 +197,33 @@ func (s *Service) UpdateUserStatus(ctx context.Context, in UpdateUserStatusInput
 		Status:    updatedUser.Status,
 		UpdatedAt: updatedUser.UpdatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+// ListAdminUsers は管理者画面に表示するユーザー一覧を返す。
+func (s *Service) ListAdminUsers(ctx context.Context) ([]AdminUser, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id::text, employee_id, email, role::text, status::text
+		FROM users
+		ORDER BY employee_id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]AdminUser, 0)
+	for rows.Next() {
+		var user AdminUser
+		if err := rows.Scan(&user.UserID, &user.EmployeeID, &user.Email, &user.Role, &user.Status); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 // buildJWT は HS256 署名付き JWT を生成する。

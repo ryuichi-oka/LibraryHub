@@ -85,6 +85,11 @@ func TestRequireRoles(t *testing.T) {
 				UpdatedAt: time.Now().Format(time.RFC3339),
 			}, nil
 		},
+		listAdminUsersFunc: func(_ context.Context) ([]auth.AdminUser, error) {
+			return []auth.AdminUser{
+				{UserID: "user-1", EmployeeID: "E001", Email: "user1@example.com", Role: "USER", Status: "ACTIVE"},
+			}, nil
+		},
 	})
 
 	t.Run("admin can access", func(t *testing.T) {
@@ -100,9 +105,33 @@ func TestRequireRoles(t *testing.T) {
 		}
 	})
 
+	t.Run("admin can access user list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+		req.Header.Set("Authorization", "Bearer admin-token")
+		res := httptest.NewRecorder()
+
+		handler.Routes().ServeHTTP(res, req)
+
+		if res.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+		}
+	})
+
 	t.Run("general user is forbidden", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/admin/users/user-2/status", strings.NewReader(`{"status":"INACTIVE"}`))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer user-token")
+		res := httptest.NewRecorder()
+
+		handler.Routes().ServeHTTP(res, req)
+
+		if res.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+		}
+	})
+
+	t.Run("general user cannot access user list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
 		req.Header.Set("Authorization", "Bearer user-token")
 		res := httptest.NewRecorder()
 
@@ -209,6 +238,65 @@ func TestUpdateUserStatusRejectsInvalidStatus(t *testing.T) {
 	}
 }
 
+func TestListAdminUsers(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(fakeAuthService{
+		parseTokenFunc: func(token string) (auth.Claims, error) {
+			return auth.Claims{
+				UserID:    "admin-1",
+				Role:      "ADMIN",
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, nil
+		},
+		listAdminUsersFunc: func(_ context.Context) ([]auth.AdminUser, error) {
+			return []auth.AdminUser{
+				{
+					UserID:     "user-2",
+					EmployeeID: "E002",
+					Email:      "user2@example.com",
+					Role:       "USER",
+					Status:     "INACTIVE",
+				},
+			}, nil
+		},
+	})
+
+	_, token := newHandlerWithToken(t, "ADMIN", time.Now().Add(time.Hour))
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var body struct {
+		Users []struct {
+			ID         string `json:"id"`
+			EmployeeID string `json:"employee_id"`
+			Email      string `json:"email"`
+			Role       string `json:"role"`
+			Status     string `json:"status"`
+		} `json:"users"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(body.Users) != 1 {
+		t.Fatalf("users count = %d, want 1", len(body.Users))
+	}
+	if body.Users[0].ID != "user-2" {
+		t.Fatalf("user id = %q, want %q", body.Users[0].ID, "user-2")
+	}
+	if body.Users[0].Status != "INACTIVE" {
+		t.Fatalf("user status = %q, want %q", body.Users[0].Status, "INACTIVE")
+	}
+}
+
 func newHandlerWithToken(t *testing.T, role string, expiresAt time.Time) (*Handler, string) {
 	t.Helper()
 
@@ -255,6 +343,7 @@ type fakeAuthService struct {
 	loginFunc            func(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error)
 	parseTokenFunc       func(token string) (auth.Claims, error)
 	updateUserStatusFunc func(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error)
+	listAdminUsersFunc   func(ctx context.Context) ([]auth.AdminUser, error)
 }
 
 func (s fakeAuthService) Login(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error) {
@@ -276,4 +365,11 @@ func (s fakeAuthService) UpdateUserStatus(ctx context.Context, in auth.UpdateUse
 		return auth.UpdateUserStatusResult{}, errors.New("unexpected update user status")
 	}
 	return s.updateUserStatusFunc(ctx, in)
+}
+
+func (s fakeAuthService) ListAdminUsers(ctx context.Context) ([]auth.AdminUser, error) {
+	if s.listAdminUsersFunc == nil {
+		return nil, errors.New("unexpected list admin users")
+	}
+	return s.listAdminUsersFunc(ctx)
 }

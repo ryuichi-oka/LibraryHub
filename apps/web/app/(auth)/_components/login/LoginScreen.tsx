@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { saveAuthSession } from "../../../_lib/authSession";
 import BrandHeader from "./BrandHeader";
 import LoginFormCard from "./LoginFormCard";
 import styles from "./LoginScreen.module.css";
@@ -35,6 +37,7 @@ function formatErrorMessage(status: number, fallback: string): string {
 }
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,8 +78,17 @@ export default function LoginScreen() {
       }
 
       const data = (await response.json()) as LoginResponse;
+      saveAuthSession({
+        token: data.token,
+        role: data.user.role,
+        expiresAt: data.expires_at,
+      });
       setLoginResult(data);
       setPassword("");
+
+      if (data.user.role === "ADMIN") {
+        router.push("/admin/users/status");
+      }
     } catch {
       setErrorMessage("ネットワークエラーが発生しました。接続状態を確認してください。");
     } finally {

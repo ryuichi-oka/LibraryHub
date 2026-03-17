@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestBuildJWTAndParseToken(t *testing.T) {
@@ -140,8 +141,39 @@ func TestUpdateUserStatusReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestListAdminUsers(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryFunc: func(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+			return &fakeRows{
+				values: [][]any{
+					{"user-1", "E001", "user1@example.com", "ADMIN", "ACTIVE"},
+					{"user-2", "E002", "user2@example.com", "USER", "INACTIVE"},
+				},
+			}, nil
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	users, err := service.ListAdminUsers(context.Background())
+	if err != nil {
+		t.Fatalf("ListAdminUsers() error = %v", err)
+	}
+
+	if len(users) != 2 {
+		t.Fatalf("users count = %d, want 2", len(users))
+	}
+	if users[0].EmployeeID != "E001" {
+		t.Fatalf("users[0].EmployeeID = %q, want %q", users[0].EmployeeID, "E001")
+	}
+	if users[1].Status != "INACTIVE" {
+		t.Fatalf("users[1].Status = %q, want %q", users[1].Status, "INACTIVE")
+	}
+}
+
 type fakeDB struct {
 	queryRowFunc func(ctx context.Context, sql string, args ...any) pgx.Row
+	queryFunc    func(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 func (db fakeDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
@@ -149,6 +181,13 @@ func (db fakeDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 		return fakeRow{err: errors.New("unexpected query")}
 	}
 	return db.queryRowFunc(ctx, sql, args...)
+}
+
+func (db fakeDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if db.queryFunc == nil {
+		return nil, errors.New("unexpected query")
+	}
+	return db.queryFunc(ctx, sql, args...)
 }
 
 type fakeRow struct {
@@ -172,5 +211,50 @@ func (r fakeRow) Scan(dest ...any) error {
 		}
 	}
 
+	return nil
+}
+
+type fakeRows struct {
+	values [][]any
+	index  int
+}
+
+func (r *fakeRows) Close() {}
+func (r *fakeRows) Err() error {
+	return nil
+}
+func (r *fakeRows) CommandTag() pgconn.CommandTag {
+	return pgconn.CommandTag{}
+}
+func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription {
+	return nil
+}
+func (r *fakeRows) Next() bool {
+	return r.index < len(r.values)
+}
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.index >= len(r.values) {
+		return errors.New("no rows")
+	}
+	row := r.values[r.index]
+	r.index++
+
+	for i := range dest {
+		switch d := dest[i].(type) {
+		case *string:
+			*d = row[i].(string)
+		default:
+			return errors.New("unsupported scan destination")
+		}
+	}
+	return nil
+}
+func (r *fakeRows) Values() ([]any, error) {
+	return nil, errors.New("not implemented")
+}
+func (r *fakeRows) RawValues() [][]byte {
+	return nil
+}
+func (r *fakeRows) Conn() *pgx.Conn {
 	return nil
 }

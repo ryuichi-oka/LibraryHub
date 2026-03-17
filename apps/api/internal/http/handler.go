@@ -21,6 +21,7 @@ type authService interface {
 	Login(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error)
 	ParseToken(token string) (auth.Claims, error)
 	UpdateUserStatus(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error)
+	ListAdminUsers(ctx context.Context) ([]auth.AdminUser, error)
 }
 
 type contextKey string
@@ -55,10 +56,35 @@ func (h *Handler) Routes() http.Handler {
 		// ユーザー有効/無効切替は管理者だけに限定する。
 		r.Use(h.requireAuth)
 		r.Use(h.requireRoles("ADMIN"))
+		r.Get("/", h.listAdminUsers)
 		r.Post("/{userId}/status", h.updateUserStatus)
 	})
 
 	return r
+}
+
+// listAdminUsers は管理者向けのユーザー一覧を返す。
+func (h *Handler) listAdminUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := h.authService.ListAdminUsers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	items := make([]map[string]string, 0, len(users))
+	for _, user := range users {
+		items = append(items, map[string]string{
+			"id":          user.UserID,
+			"employee_id": user.EmployeeID,
+			"email":       user.Email,
+			"role":        user.Role,
+			"status":      user.Status,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": items,
+	})
 }
 
 type loginRequest struct {
