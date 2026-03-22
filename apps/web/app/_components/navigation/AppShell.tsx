@@ -16,16 +16,11 @@ const PRIMARY_NAV_ITEMS: NavigationItem[] = [
 ];
 
 function getHamburgerItems(role: string): NavigationItem[] {
-  const baseItems: NavigationItem[] = [
-    { label: "通知", href: "/notifications" },
-    { label: "履歴", href: "/histories/loans" },
-  ];
-
   if (isAdminRole(role)) {
-    return [{ label: "管理者画面（利用者管理）", href: "/admin/users/status" }, ...baseItems];
+    return [{ label: "管理者画面（利用者管理）", href: "/admin/users/status" }];
   }
 
-  return baseItems;
+  return [];
 }
 
 type AppShellProps = {

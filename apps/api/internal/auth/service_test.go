@@ -97,6 +97,45 @@ func TestLoginRejectsInactiveUser(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsUnknownIdentifier(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{err: pgx.ErrNoRows}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	_, err := service.Login(context.Background(), LoginInput{
+		Identifier: "not-found@example.com",
+		Password:   "Passw0rd!",
+	})
+	if err != ErrInvalidCredentials {
+		t.Fatalf("Login() error = %v, want %v", err, ErrInvalidCredentials)
+	}
+}
+
+func TestLoginReturnsErrorWhenUserLookupFails(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{err: errors.New("db unavailable")}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	_, err := service.Login(context.Background(), LoginInput{
+		Identifier: "E001",
+		Password:   "Passw0rd!",
+	})
+	if err == nil {
+		t.Fatalf("Login() error = nil, want non-nil")
+	}
+	if errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("Login() error = %v, should not be invalid credentials", err)
+	}
+}
+
 func TestUpdateUserStatus(t *testing.T) {
 	t.Parallel()
 

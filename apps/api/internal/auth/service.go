@@ -133,7 +133,11 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 		&user.PasswordHash,
 	)
 	if err != nil {
-		return LoginResult{}, ErrInvalidCredentials
+		if errors.Is(err, pgx.ErrNoRows) {
+			return LoginResult{}, ErrInvalidCredentials
+		}
+		// DB 障害は認証失敗に丸めず、呼び出し元で 500 へ変換できるよう保持する。
+		return LoginResult{}, fmt.Errorf("load user by identifier: %w", err)
 	}
 
 	// ユーザー保存済みのハッシュと入力パスワードを照合する。
