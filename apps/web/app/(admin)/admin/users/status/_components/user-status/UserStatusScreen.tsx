@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { clearAuthSession, isSessionExpired, loadAuthSession } from "../../../../../../_lib/authSession";
+import { LOGIN_PATH } from "../../../../../../_lib/authorization";
 import styles from "./UserStatusScreen.module.css";
 import UserStatusFeedback from "./UserStatusFeedback";
 import UserStatusForm from "./UserStatusForm";
@@ -47,6 +49,7 @@ function extractUserIDFromToken(token: string): string {
 }
 
 export default function UserStatusScreen() {
+  const router = useRouter();
   const [adminToken, setAdminToken] = useState("");
   const [adminUserID, setAdminUserID] = useState("");
   const [isSessionReady, setIsSessionReady] = useState(false);
@@ -100,6 +103,8 @@ export default function UserStatusScreen() {
       if (!response.ok) {
         if (response.status === 401) {
           clearAuthSession();
+          router.replace(LOGIN_PATH);
+          return;
         }
         const errorBody = (await response.json().catch(() => ({}))) as ErrorResponse;
         setErrorMessage(formatErrorMessage(response.status, errorBody.error ?? ""));
@@ -130,14 +135,12 @@ export default function UserStatusScreen() {
   useEffect(() => {
     const session = loadAuthSession();
     if (!session) {
-      setErrorMessage("セッション情報を確認できませんでした。再ログインしてください。");
-      setIsSessionReady(true);
+      router.replace(LOGIN_PATH);
       return;
     }
     if (isSessionExpired(session.expiresAt)) {
       clearAuthSession();
-      setErrorMessage("セッションの有効期限が切れました。再ログインしてください。");
-      setIsSessionReady(true);
+      router.replace(LOGIN_PATH);
       return;
     }
 
@@ -146,7 +149,7 @@ export default function UserStatusScreen() {
     setAdminToken(session.token);
     setIsSessionReady(true);
     void fetchUsers(session.token, currentAdminUserID);
-  }, []);
+  }, [router]);
 
   // セッション判定が終わるまで管理者画面本体を描画しない。
   // これにより、一般利用者の直リンク時に一瞬だけ管理者UIが見える現象を防ぐ。
@@ -184,6 +187,8 @@ export default function UserStatusScreen() {
       if (!response.ok) {
         if (response.status === 401) {
           clearAuthSession();
+          router.replace(LOGIN_PATH);
+          return;
         }
         const errorBody = (await response.json().catch(() => ({}))) as ErrorResponse;
         setErrorMessage(formatErrorMessage(response.status, errorBody.error ?? ""));

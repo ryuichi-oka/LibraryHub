@@ -136,6 +136,53 @@ func TestLoginReturnsErrorWhenUserLookupFails(t *testing.T) {
 	}
 }
 
+func TestEnsureUserActive(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, args ...any) pgx.Row {
+			if got, want := args[0], "user-1"; got != want {
+				t.Fatalf("user id = %v, want %v", got, want)
+			}
+			return fakeRow{values: []any{"ACTIVE"}}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	if err := service.EnsureUserActive(context.Background(), "user-1"); err != nil {
+		t.Fatalf("EnsureUserActive() error = %v, want nil", err)
+	}
+}
+
+func TestEnsureUserActiveRejectsInactiveUser(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{values: []any{"INACTIVE"}}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	err := service.EnsureUserActive(context.Background(), "user-2")
+	if err != ErrUserInactive {
+		t.Fatalf("EnsureUserActive() error = %v, want %v", err, ErrUserInactive)
+	}
+}
+
+func TestEnsureUserActiveReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{err: pgx.ErrNoRows}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	err := service.EnsureUserActive(context.Background(), "user-404")
+	if err != ErrUserNotFound {
+		t.Fatalf("EnsureUserActive() error = %v, want %v", err, ErrUserNotFound)
+	}
+}
+
 func TestUpdateUserStatus(t *testing.T) {
 	t.Parallel()
 

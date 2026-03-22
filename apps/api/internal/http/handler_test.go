@@ -49,6 +49,60 @@ func TestRequireAuthAllowsAccessToMe(t *testing.T) {
 	}
 }
 
+func TestRequireAuthRejectsInactiveUser(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(fakeAuthService{
+		parseTokenFunc: func(_ string) (auth.Claims, error) {
+			return auth.Claims{
+				UserID:    "user-1",
+				Role:      "USER",
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, nil
+		},
+		ensureUserActiveFunc: func(_ context.Context, _ string) error {
+			return auth.ErrUserInactive
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequireAuthReturnsInternalServerErrorWhenStatusCheckFails(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(fakeAuthService{
+		parseTokenFunc: func(_ string) (auth.Claims, error) {
+			return auth.Claims{
+				UserID:    "user-1",
+				Role:      "USER",
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, nil
+		},
+		ensureUserActiveFunc: func(_ context.Context, _ string) error {
+			return errors.New("db unavailable")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusInternalServerError)
+	}
+}
+
 func TestRequireAuthRejectsMissingToken(t *testing.T) {
 	t.Parallel()
 
@@ -349,13 +403,20 @@ func TestUpdateUserStatusRejectsOwnAccount(t *testing.T) {
 func newHandlerWithToken(t *testing.T, role string, expiresAt time.Time) (*Handler, string) {
 	t.Helper()
 
-	service := auth.NewService(nil, "libraryhub-secret", time.Hour)
-	token, err := authToken("libraryhub-secret", "user-1", role, expiresAt)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
+	service := fakeAuthService{
+		parseTokenFunc: func(token string) (auth.Claims, error) {
+			if token != "valid-token" {
+				return auth.Claims{}, auth.ErrInvalidToken
+			}
+			return auth.Claims{
+				UserID:    "user-1",
+				Role:      role,
+				ExpiresAt: expiresAt,
+			}, nil
+		},
 	}
 
-	return NewHandler(service), token
+	return NewHandler(service), "valid-token"
 }
 
 func authToken(secret, userID, role string, expiresAt time.Time) (string, error) {
@@ -391,6 +452,7 @@ func authToken(secret, userID, role string, expiresAt time.Time) (string, error)
 type fakeAuthService struct {
 	loginFunc            func(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error)
 	parseTokenFunc       func(token string) (auth.Claims, error)
+	ensureUserActiveFunc func(ctx context.Context, userID string) error
 	updateUserStatusFunc func(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error)
 	listAdminUsersFunc   func(ctx context.Context) ([]auth.AdminUser, error)
 }
@@ -407,6 +469,13 @@ func (s fakeAuthService) ParseToken(token string) (auth.Claims, error) {
 		return auth.Claims{}, auth.ErrInvalidToken
 	}
 	return s.parseTokenFunc(token)
+}
+
+func (s fakeAuthService) EnsureUserActive(ctx context.Context, userID string) error {
+	if s.ensureUserActiveFunc == nil {
+		return nil
+	}
+	return s.ensureUserActiveFunc(ctx, userID)
 }
 
 func (s fakeAuthService) UpdateUserStatus(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error) {

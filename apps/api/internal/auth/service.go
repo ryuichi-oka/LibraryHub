@@ -171,6 +171,34 @@ func (s *Service) ParseToken(token string) (Claims, error) {
 	return parseJWT(s.jwtSecret, token, time.Now())
 }
 
+// EnsureUserActive は認証済みユーザーが有効状態かを確認する。
+func (s *Service) EnsureUserActive(ctx context.Context, userID string) error {
+	trimmedUserID := strings.TrimSpace(userID)
+	if trimmedUserID == "" {
+		return ErrUserNotFound
+	}
+
+	var status string
+	err := s.db.QueryRow(ctx, `
+		SELECT status::text
+		FROM users
+		WHERE id = $1::uuid
+		LIMIT 1
+	`, trimmedUserID).Scan(&status)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("load user status: %w", err)
+	}
+
+	if status != "ACTIVE" {
+		return ErrUserInactive
+	}
+
+	return nil
+}
+
 // UpdateUserStatus は対象ユーザーの有効/無効状態を更新する。
 func (s *Service) UpdateUserStatus(ctx context.Context, in UpdateUserStatusInput) (UpdateUserStatusResult, error) {
 	userID := strings.TrimSpace(in.UserID)

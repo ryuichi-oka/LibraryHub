@@ -20,6 +20,7 @@ type Handler struct {
 type authService interface {
 	Login(ctx context.Context, in auth.LoginInput) (auth.LoginResult, error)
 	ParseToken(token string) (auth.Claims, error)
+	EnsureUserActive(ctx context.Context, userID string) error
 	UpdateUserStatus(ctx context.Context, in auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error)
 	ListAdminUsers(ctx context.Context) ([]auth.AdminUser, error)
 }
@@ -211,6 +212,15 @@ func (h *Handler) requireAuth(next http.Handler) http.Handler {
 		claims, err := h.authService.ParseToken(strings.TrimSpace(token))
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		if err := h.authService.EnsureUserActive(r.Context(), claims.UserID); err != nil {
+			switch err {
+			case auth.ErrUserInactive, auth.ErrUserNotFound:
+				writeError(w, http.StatusUnauthorized, "invalid token")
+			default:
+				writeError(w, http.StatusInternalServerError, "internal server error")
+			}
 			return
 		}
 
