@@ -1,1 +1,20 @@
 scripts/
+apps/web/.next/
+
+# Node.js / Next.js
+apps/web/node_modules/
+apps/web/out/
+
+# Go
+*.test
+*.out
+coverage.out
+
+# Env / local overrides
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db

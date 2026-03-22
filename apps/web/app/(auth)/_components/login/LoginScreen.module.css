@@ -1,0 +1,183 @@
+.shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.centerWrap {
+  width: min(100%, 28rem);
+}
+
+.brandHeader {
+  border: 1px solid #d9dee7;
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem 1.2rem;
+  text-align: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f7ff 100%);
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.brandEyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #5b6f8f;
+}
+
+.brandTitle {
+  margin: 0.4rem 0 0;
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Avenir Next", "Noto Sans JP", sans-serif;
+  font-size: clamp(2.05rem, 6vw, 2.42rem);
+  font-weight: 780;
+  letter-spacing: 0.065em;
+  line-height: 1.1;
+  color: #1e3a8a;
+}
+
+.brandSubTitle {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #506079;
+}
+
+.formTitle {
+  margin: 0;
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Avenir Next", "Noto Sans JP", sans-serif;
+  font-size: 1.88rem;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: #3f5877;
+  text-align: center;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  padding-bottom: 0.45rem;
+}
+
+.formTitle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 10rem;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0.45), rgba(59, 130, 246, 0.14));
+}
+
+.formLead {
+  margin: 0.42rem 0 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.7;
+  color: #64748b;
+}
+
+.fieldLabel {
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #334155;
+}
+
+.textInput {
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+  border: 1px solid #c7d2e0;
+  border-radius: 0.78rem;
+  background: #ffffff;
+  padding: 0.8rem 0.9rem;
+  font-size: 1.02rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.textInput::placeholder {
+  color: #94a3b8;
+}
+
+.textInput:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.textInput:disabled {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.submitButton {
+  border-radius: 0.78rem;
+  border: 0;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  padding: 0.78rem 1rem;
+  color: #ffffff;
+  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+}
+
+.submitButtonLabel {
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Avenir Next", "Noto Sans JP", sans-serif;
+  font-size: 1.02rem;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.submitButton:hover:enabled {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.submitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.bgOrb {
+  position: absolute;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 999px;
+  opacity: 0.24;
+  filter: blur(12px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.bgOrbLeft {
+  left: -8rem;
+  top: 2rem;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.18) 0%, rgba(96, 165, 250, 0) 68%);
+  animation: driftY 12s ease-in-out infinite;
+}
+
+.bgOrbRight {
+  right: -9rem;
+  bottom: -1rem;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0) 68%);
+  animation: driftY 13s ease-in-out infinite reverse;
+}
+
+@keyframes driftY {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+
+  50% {
+    transform: translateY(10px);
+  }
+}
