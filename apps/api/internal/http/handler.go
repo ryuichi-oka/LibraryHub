@@ -160,7 +160,8 @@ func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
-	if claims.UserID == chi.URLParam(r, "userId") {
+	targetUserID := chi.URLParam(r, "userId")
+	if isSameUserID(claims.UserID, targetUserID) {
 		writeError(w, http.StatusConflict, "cannot update own status")
 		return
 	}
@@ -173,7 +174,7 @@ func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.authService.UpdateUserStatus(r.Context(), auth.UpdateUserStatusInput{
-		UserID: chi.URLParam(r, "userId"),
+		UserID: targetUserID,
 		Status: req.Status,
 	})
 	if err != nil {
@@ -196,6 +197,34 @@ func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
 			"updated_at": result.UpdatedAt,
 		},
 	})
+}
+
+// isSameUserID は UUID の表記ゆれを吸収して同一ユーザーかを判定する。
+func isSameUserID(left, right string) bool {
+	normalizedLeft, okLeft := normalizeUUID(left)
+	normalizedRight, okRight := normalizeUUID(right)
+	if !okLeft || !okRight {
+		return false
+	}
+	return normalizedLeft == normalizedRight
+}
+
+// normalizeUUID は UUID を比較しやすい 32 桁の16進文字列へ正規化する。
+func normalizeUUID(value string) (string, bool) {
+	normalized := strings.TrimSpace(value)
+	normalized = strings.TrimPrefix(strings.ToLower(normalized), "urn:uuid:")
+	normalized = strings.TrimPrefix(normalized, "{")
+	normalized = strings.TrimSuffix(normalized, "}")
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	if len(normalized) != 32 {
+		return "", false
+	}
+	for _, char := range normalized {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return "", false
+		}
+	}
+	return normalized, true
 }
 
 // requireAuth は Bearer トークンを検証し、認証情報を context に設定するミドルウェア。

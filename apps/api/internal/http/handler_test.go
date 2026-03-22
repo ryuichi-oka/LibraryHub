@@ -374,10 +374,11 @@ func TestLoginInactiveUserReturnsForbidden(t *testing.T) {
 func TestUpdateUserStatusRejectsOwnAccount(t *testing.T) {
 	t.Parallel()
 
+	claimsUserID := "a5d3e133-737c-4caf-aa5d-4f0e27d9f1ca"
 	handler := NewHandler(fakeAuthService{
 		parseTokenFunc: func(_ string) (auth.Claims, error) {
 			return auth.Claims{
-				UserID:    "admin-1",
+				UserID:    claimsUserID,
 				Role:      "ADMIN",
 				ExpiresAt: time.Now().Add(time.Hour),
 			}, nil
@@ -388,7 +389,11 @@ func TestUpdateUserStatusRejectsOwnAccount(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/users/admin-1/status", strings.NewReader(`{"status":"INACTIVE"}`))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/admin/users/A5D3E133737C4CAFAA5D4F0E27D9F1CA/status",
+		strings.NewReader(`{"status":"INACTIVE"}`),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer admin-token")
 	res := httptest.NewRecorder()

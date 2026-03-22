@@ -27,6 +27,13 @@ type AppShellProps = {
   children: ReactNode;
 };
 
+type MeResponse = {
+  user?: {
+    role?: string;
+  };
+  expires_at?: string;
+};
+
 export default function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -36,28 +43,68 @@ export default function AppShell({ children }: AppShellProps) {
   const [currentHash, setCurrentHash] = useState("");
 
   useEffect(() => {
-    setIsReady(false);
+    let cancelled = false;
 
-    const storedSession = loadAuthSession();
-    if (!storedSession) {
-      router.replace(LOGIN_PATH);
-      return;
+    async function validateSession() {
+      setIsReady(false);
+
+      const storedSession = loadAuthSession();
+      if (!storedSession) {
+        router.replace(LOGIN_PATH);
+        return;
+      }
+      if (isSessionExpired(storedSession.expiresAt)) {
+        clearAuthSession();
+        router.replace(LOGIN_PATH);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/me", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${storedSession.token}`,
+          },
+        });
+        if (!response.ok) {
+          clearAuthSession();
+          router.replace(LOGIN_PATH);
+          return;
+        }
+
+        const me = (await response.json()) as MeResponse;
+        const verifiedSession: AuthSession = {
+          token: storedSession.token,
+          role: typeof me.user?.role === "string" ? me.user.role : storedSession.role,
+          expiresAt: typeof me.expires_at === "string" ? me.expires_at : storedSession.expiresAt,
+        };
+        if (isSessionExpired(verifiedSession.expiresAt)) {
+          clearAuthSession();
+          router.replace(LOGIN_PATH);
+          return;
+        }
+
+        const currentPath = pathname || USER_DEFAULT_PATH;
+        if (!canAccessPath(verifiedSession.role, currentPath)) {
+          router.replace(USER_DEFAULT_PATH);
+          return;
+        }
+
+        if (cancelled) {
+          return;
+        }
+        setSession(verifiedSession);
+        setIsReady(true);
+      } catch {
+        clearAuthSession();
+        router.replace(LOGIN_PATH);
+      }
     }
 
-    if (isSessionExpired(storedSession.expiresAt)) {
-      clearAuthSession();
-      router.replace(LOGIN_PATH);
-      return;
-    }
-
-    const currentPath = pathname || USER_DEFAULT_PATH;
-    if (!canAccessPath(storedSession.role, currentPath)) {
-      router.replace(USER_DEFAULT_PATH);
-      return;
-    }
-
-    setSession(storedSession);
-    setIsReady(true);
+    void validateSession();
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, router]);
 
   useEffect(() => {
