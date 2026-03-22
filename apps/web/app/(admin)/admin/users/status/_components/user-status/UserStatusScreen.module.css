@@ -9,6 +9,7 @@
 
 .container {
   width: min(100%, 40rem);
+  margin-inline: auto;
 }
 
 .heading {
@@ -82,6 +83,31 @@
   font-size: 0.9rem;
   line-height: 1.5;
   color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.currentStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.currentStatusBadgeActive {
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.currentStatusBadgeInactive {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
 }
 
 .statusGroup {

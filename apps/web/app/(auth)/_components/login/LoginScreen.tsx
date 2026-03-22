@@ -31,6 +31,9 @@ function formatErrorMessage(status: number, fallback: string): string {
   if (status === 401) {
     return "社員ID / メールアドレスまたはパスワードが正しくありません。";
   }
+  if (status === 403) {
+    return "このユーザーは無効です。管理者に連絡してください。";
+  }
   if (status === 400) {
     return "入力内容を確認して、もう一度お試しください。";
   }
@@ -43,7 +46,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [loginResult, setLoginResult] = useState<LoginResponse | null>(null);
 
   const canSubmit = useMemo(() => {
     return identifier.trim().length > 0 && password.length > 0 && !isSubmitting;
@@ -58,7 +60,6 @@ export default function LoginScreen() {
 
     setIsSubmitting(true);
     setErrorMessage("");
-    setLoginResult(null);
 
     try {
       const response = await fetch(LOGIN_ENDPOINT, {
@@ -84,7 +85,6 @@ export default function LoginScreen() {
         role: data.user.role,
         expiresAt: data.expires_at,
       });
-      setLoginResult(data);
       setPassword("");
       router.push(getDefaultPathByRole(data.user.role));
     } catch {
@@ -107,7 +107,6 @@ export default function LoginScreen() {
           isSubmitting={isSubmitting}
           canSubmit={canSubmit}
           errorMessage={errorMessage}
-          loginResult={loginResult}
           onIdentifierChange={setIdentifier}
           onPasswordChange={setPassword}
           onSubmit={handleSubmit}

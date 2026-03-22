@@ -297,6 +297,55 @@ func TestListAdminUsers(t *testing.T) {
 	}
 }
 
+func TestLoginInactiveUserReturnsForbidden(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(fakeAuthService{
+		loginFunc: func(_ context.Context, _ auth.LoginInput) (auth.LoginResult, error) {
+			return auth.LoginResult{}, auth.ErrUserInactive
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(`{"identifier":"E002","password":"dummy"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+}
+
+func TestUpdateUserStatusRejectsOwnAccount(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(fakeAuthService{
+		parseTokenFunc: func(_ string) (auth.Claims, error) {
+			return auth.Claims{
+				UserID:    "admin-1",
+				Role:      "ADMIN",
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, nil
+		},
+		updateUserStatusFunc: func(_ context.Context, _ auth.UpdateUserStatusInput) (auth.UpdateUserStatusResult, error) {
+			t.Fatalf("updateUserStatus must not be called when updating self")
+			return auth.UpdateUserStatusResult{}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/admin-1/status", strings.NewReader(`{"status":"INACTIVE"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+}
+
 func newHandlerWithToken(t *testing.T, role string, expiresAt time.Time) (*Handler, string) {
 	t.Helper()
 

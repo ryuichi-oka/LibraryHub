@@ -19,6 +19,14 @@
   color: #1e3a8a;
 }
 
+.brandLink {
+  text-decoration: none;
+}
+
+.brandLink:hover .brand {
+  color: #1d4ed8;
+}
+
 .tagline {
   margin: 0.08rem 0 0;
   font-size: 0.82rem;

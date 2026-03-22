@@ -2,12 +2,20 @@ export type UserStatus = "ACTIVE" | "INACTIVE";
 
 export type UpdatedUser = {
   id: string;
+  employee_id: string;
+  email: string;
+  status: UserStatus;
+  updated_at: string;
+};
+
+export type UpdateUserStatusApiUser = {
+  id: string;
   status: UserStatus;
   updated_at: string;
 };
 
 export type UpdateUserStatusResponse = {
-  user: UpdatedUser;
+  user: UpdateUserStatusApiUser;
 };
 
 export type AdminUser = {

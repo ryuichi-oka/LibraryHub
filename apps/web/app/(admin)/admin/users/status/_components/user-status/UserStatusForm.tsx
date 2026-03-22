@@ -9,6 +9,7 @@ const USER_STATUS_OPTIONS: Array<{ value: UserStatus; label: string }> = [
 type UserStatusFormProps = {
   users: AdminUser[];
   selectedUserID: string;
+  currentStatus: UserStatus | null;
   currentStatusLabel: string;
   status: UserStatus;
   isSubmitting: boolean;
@@ -21,6 +22,7 @@ type UserStatusFormProps = {
 export default function UserStatusForm({
   users,
   selectedUserID,
+  currentStatus,
   currentStatusLabel,
   status,
   isSubmitting,
@@ -51,7 +53,16 @@ export default function UserStatusForm({
         </select>
       </label>
 
-      <p className={styles.currentStatus}>現在の状態: {currentStatusLabel}</p>
+      <p className={styles.currentStatus}>
+        現在の状態:
+        <span
+          className={`${styles.currentStatusBadge} ${
+            currentStatus === "ACTIVE" ? styles.currentStatusBadgeActive : styles.currentStatusBadgeInactive
+          }`}
+        >
+          {currentStatusLabel}
+        </span>
+      </p>
 
       <div className={styles.fieldBlock}>
         <span className={styles.label}>変更後の状態</span>

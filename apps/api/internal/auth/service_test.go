@@ -72,6 +72,31 @@ func TestParseJWTRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsInactiveUser(t *testing.T) {
+	t.Parallel()
+
+	hashed, err := HashPassword("Passw0rd!")
+	if err != nil {
+		t.Fatalf("HashPassword() error = %v", err)
+	}
+
+	service := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return fakeRow{
+				values: []any{"user-2", "E002", "user2@example.com", "USER", "INACTIVE", hashed},
+			}
+		},
+	}, "libraryhub-secret", time.Hour)
+
+	_, err = service.Login(context.Background(), LoginInput{
+		Identifier: "E002",
+		Password:   "Passw0rd!",
+	})
+	if err != ErrUserInactive {
+		t.Fatalf("Login() error = %v, want %v", err, ErrUserInactive)
+	}
+}
+
 func TestUpdateUserStatus(t *testing.T) {
 	t.Parallel()
 

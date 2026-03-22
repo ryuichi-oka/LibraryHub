@@ -18,6 +18,9 @@ import (
 // ErrInvalidCredentials は識別子またはパスワードが不正なときに返す。
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
+// ErrUserInactive はユーザーが無効状態のときに返す。
+var ErrUserInactive = errors.New("user inactive")
+
 // ErrInvalidToken は JWT の形式・署名・有効期限が不正なときに返す。
 var ErrInvalidToken = errors.New("invalid token")
 
@@ -60,6 +63,7 @@ type userRecord struct {
 	EmployeeID   string
 	Email        string
 	Role         string
+	Status       string
 	PasswordHash string
 }
 
@@ -116,16 +120,16 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 	var user userRecord
 	// identifier はメールアドレス/社員ID のどちらでも一致させる。
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, employee_id, email, role::text, password_hash
+		SELECT id::text, employee_id, email, role::text, status::text, password_hash
 		FROM users
-		WHERE status = 'ACTIVE'
-		  AND (email = $1 OR employee_id = $1)
+		WHERE email = $1 OR employee_id = $1
 		LIMIT 1
 	`, identifier).Scan(
 		&user.ID,
 		&user.EmployeeID,
 		&user.Email,
 		&user.Role,
+		&user.Status,
 		&user.PasswordHash,
 	)
 	if err != nil {
@@ -135,6 +139,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 	// ユーザー保存済みのハッシュと入力パスワードを照合する。
 	if !VerifyPasswordHash(user.PasswordHash, in.Password) {
 		return LoginResult{}, ErrInvalidCredentials
+	}
+	if user.Status != "ACTIVE" {
+		return LoginResult{}, ErrUserInactive
 	}
 
 	now := time.Now()

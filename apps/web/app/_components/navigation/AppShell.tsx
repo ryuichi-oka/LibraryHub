@@ -96,15 +96,17 @@ export default function AppShell({ children }: AppShellProps) {
     return null;
   }
   const isAdmin = isAdminRole(session.role);
+  const currentPath = pathname || USER_DEFAULT_PATH;
+  const isHomePath = currentPath === USER_DEFAULT_PATH;
 
   return (
     <div className={`${styles.shell} bg-slate-50`}>
       <header className={styles.header}>
         <div className="relative flex w-full items-center justify-between gap-3 px-5 py-2 sm:px-8">
-          <div>
+          <Link href={USER_DEFAULT_PATH} className={styles.brandLink} aria-label="トップ画面へ移動">
             <p className={styles.brand}>LIBRARYHUB</p>
             <p className={styles.tagline}>図書管理システム</p>
-          </div>
+          </Link>
 
           <div className="flex items-center gap-2">
             {isAdmin && <span className={styles.roleBadge}>管理者</span>}
@@ -142,16 +144,18 @@ export default function AppShell({ children }: AppShellProps) {
           )}
         </div>
 
-        <TopNavigation
-          items={navItems}
-          pathname={pathname || ""}
-          currentHash={currentHash}
-          onHashChange={setCurrentHash}
-        />
+        {isHomePath ? (
+          <TopNavigation
+            items={navItems}
+            pathname={pathname || ""}
+            currentHash={currentHash}
+            onHashChange={setCurrentHash}
+          />
+        ) : null}
       </header>
 
       <div className="flex w-full flex-col gap-4 px-5 py-5 sm:px-8 md:flex-row md:items-start">
-        <SearchPanel />
+        {isHomePath ? <SearchPanel /> : null}
 
         <main className="min-w-0 flex-1">{children}</main>
       </div>

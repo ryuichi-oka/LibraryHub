@@ -114,6 +114,10 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
+		if err == auth.ErrUserInactive {
+			writeError(w, http.StatusForbidden, "user inactive")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -150,6 +154,16 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 // updateUserStatus は管理者による利用者の有効/無効切り替えを受け付ける。
 func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authClaimsFromContext(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	if claims.UserID == chi.URLParam(r, "userId") {
+		writeError(w, http.StatusConflict, "cannot update own status")
+		return
+	}
+
 	var req updateUserStatusRequest
 	// 管理者操作でも JSON が壊れていれば業務処理へ進めない。
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

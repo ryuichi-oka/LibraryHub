@@ -6,7 +6,7 @@ import { clearAuthSession, isSessionExpired, loadAuthSession } from "../../../..
 import styles from "./UserStatusScreen.module.css";
 import UserStatusFeedback from "./UserStatusFeedback";
 import UserStatusForm from "./UserStatusForm";
-import { AdminUser, AdminUsersResponse, ErrorResponse, UpdateUserStatusResponse, UserStatus } from "./types";
+import { AdminUser, AdminUsersResponse, ErrorResponse, UpdateUserStatusResponse, UpdatedUser, UserStatus } from "./types";
 
 function formatErrorMessage(status: number, fallback: string): string {
   if (status === 400) {
@@ -21,11 +21,34 @@ function formatErrorMessage(status: number, fallback: string): string {
   if (status === 404) {
     return "指定したユーザーが見つかりません。";
   }
+  if (status === 409) {
+    return "自分自身の利用状態は変更できません。";
+  }
   return fallback || "ステータス更新に失敗しました。時間をおいて再試行してください。";
+}
+
+function decodeBase64URL(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return atob(padded);
+}
+
+function extractUserIDFromToken(token: string): string {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) {
+      return "";
+    }
+    const payload = JSON.parse(decodeBase64URL(parts[1])) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : "";
+  } catch {
+    return "";
+  }
 }
 
 export default function UserStatusScreen() {
   const [adminToken, setAdminToken] = useState("");
+  const [adminUserID, setAdminUserID] = useState("");
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [selectedUserID, setSelectedUserID] = useState("");
@@ -33,7 +56,7 @@ export default function UserStatusScreen() {
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [updatedUser, setUpdatedUser] = useState<UpdateUserStatusResponse["user"] | null>(null);
+  const [updatedUser, setUpdatedUser] = useState<UpdatedUser | null>(null);
 
   const selectedUser = useMemo(() => {
     return users.find((user) => user.id === selectedUserID) ?? null;
@@ -45,6 +68,7 @@ export default function UserStatusScreen() {
     }
     return selectedUser.status === "ACTIVE" ? "有効" : "無効";
   }, [selectedUser]);
+  const currentStatus = selectedUser?.status ?? null;
 
   const canSubmit = useMemo(() => {
     return isSessionReady && adminToken.trim().length > 0 && selectedUserID.trim().length > 0 && !isSubmitting && !isFetchingUsers;
@@ -56,7 +80,7 @@ export default function UserStatusScreen() {
     }
   }, [selectedUser]);
 
-  async function fetchUsers(token: string) {
+  async function fetchUsers(token: string, currentAdminUserID: string) {
     if (token.trim().length === 0) {
       return;
     }
@@ -83,17 +107,18 @@ export default function UserStatusScreen() {
       }
 
       const result = (await response.json()) as AdminUsersResponse;
-      setUsers(result.users);
+      const manageableUsers = result.users.filter((user) => user.id !== currentAdminUserID);
+      setUsers(manageableUsers);
 
-      if (result.users.length === 0) {
+      if (manageableUsers.length === 0) {
         setSelectedUserID("");
-        setErrorMessage("選択可能なユーザーが見つかりませんでした。");
+        setErrorMessage("変更可能なユーザーが見つかりませんでした。");
         return;
       }
 
-      const hasCurrent = result.users.some((user) => user.id === selectedUserID);
+      const hasCurrent = manageableUsers.some((user) => user.id === selectedUserID);
       if (!hasCurrent) {
-        setSelectedUserID(result.users[0].id);
+        setSelectedUserID(manageableUsers[0].id);
       }
     } catch {
       setErrorMessage("ユーザー一覧の取得中にネットワークエラーが発生しました。");
@@ -116,9 +141,11 @@ export default function UserStatusScreen() {
       return;
     }
 
+    const currentAdminUserID = extractUserIDFromToken(session.token);
+    setAdminUserID(currentAdminUserID);
     setAdminToken(session.token);
     setIsSessionReady(true);
-    void fetchUsers(session.token);
+    void fetchUsers(session.token, currentAdminUserID);
   }, []);
 
   // セッション判定が終わるまで管理者画面本体を描画しない。
@@ -140,6 +167,11 @@ export default function UserStatusScreen() {
 
     try {
       const targetUserID = selectedUserID.trim();
+      if (targetUserID === adminUserID) {
+        setErrorMessage("自分自身の利用状態は変更できません。");
+        return;
+      }
+
       const response = await fetch(`/api/admin/users/${encodeURIComponent(targetUserID)}/status`, {
         method: "POST",
         headers: {
@@ -159,7 +191,12 @@ export default function UserStatusScreen() {
       }
 
       const result = (await response.json()) as UpdateUserStatusResponse;
-      setUpdatedUser(result.user);
+      const updatedTargetUser = users.find((user) => user.id === result.user.id);
+      setUpdatedUser({
+        ...result.user,
+        employee_id: updatedTargetUser?.employee_id ?? "-",
+        email: updatedTargetUser?.email ?? "-",
+      });
       setUsers((prevUsers) =>
         prevUsers.map((user) => (user.id === result.user.id ? { ...user, status: result.user.status } : user)),
       );
@@ -171,7 +208,7 @@ export default function UserStatusScreen() {
   }
 
   return (
-    <div className={`${styles.shell} py-3`}>
+    <div className={`${styles.shell} min-h-[calc(100vh-7.5rem)] py-4`}>
       <main className={`${styles.container} flex flex-col gap-4`}>
         <h1 className={styles.heading}>利用状態の変更</h1>
         <p className={styles.lead}>
@@ -186,6 +223,7 @@ export default function UserStatusScreen() {
             <UserStatusForm
               users={users}
               selectedUserID={selectedUserID}
+              currentStatus={currentStatus}
               currentStatusLabel={currentStatusLabel}
               status={status}
               isSubmitting={isSubmitting}
