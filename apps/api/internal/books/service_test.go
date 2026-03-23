@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,9 +159,12 @@ func TestDeleteBook(t *testing.T) {
 	t.Parallel()
 
 	svc := newService(fakeDB{
-		queryRowFunc: func(_ context.Context, _ string, args ...any) pgx.Row {
+		queryRowFunc: func(_ context.Context, sql string, args ...any) pgx.Row {
 			if got, want := args[0], "4db4f287-05fd-4d9e-90de-10c4bfd37d3f"; got != want {
 				t.Fatalf("book id = %v, want %v", got, want)
+			}
+			if strings.Contains(sql, "SELECT EXISTS") {
+				return fakeRow{values: []any{false}}
 			}
 			return fakeRow{values: []any{"4db4f287-05fd-4d9e-90de-10c4bfd37d3f"}}
 		},
@@ -184,6 +188,43 @@ func TestDeleteBookRejectsInvalidUUID(t *testing.T) {
 	err := svc.DeleteBook(context.Background(), "invalid")
 	if err != ErrInvalidBookID {
 		t.Fatalf("DeleteBook() error = %v, want %v", err, ErrInvalidBookID)
+	}
+}
+
+func TestDeleteBookRejectsWhenReservationsExist(t *testing.T) {
+	t.Parallel()
+
+	svc := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, sql string, _ ...any) pgx.Row {
+			if strings.Contains(sql, "SELECT EXISTS") {
+				return fakeRow{values: []any{true}}
+			}
+			t.Fatalf("delete query should not run when reservations exist")
+			return fakeRow{}
+		},
+	})
+
+	err := svc.DeleteBook(context.Background(), "eb95afe7-fad2-46d1-bf6a-69d35aee592e")
+	if err != ErrBookDeleteRestricted {
+		t.Fatalf("DeleteBook() error = %v, want %v", err, ErrBookDeleteRestricted)
+	}
+}
+
+func TestDeleteBookReturnsRestrictedOnForeignKeyViolation(t *testing.T) {
+	t.Parallel()
+
+	svc := newService(fakeDB{
+		queryRowFunc: func(_ context.Context, sql string, _ ...any) pgx.Row {
+			if strings.Contains(sql, "SELECT EXISTS") {
+				return fakeRow{values: []any{false}}
+			}
+			return fakeRow{err: &pgconn.PgError{Code: "23503"}}
+		},
+	})
+
+	err := svc.DeleteBook(context.Background(), "8ab97f7f-c73f-474a-a14f-b1b26938773c")
+	if err != ErrBookDeleteRestricted {
+		t.Fatalf("DeleteBook() error = %v, want %v", err, ErrBookDeleteRestricted)
 	}
 }
 
@@ -225,6 +266,8 @@ func (r fakeRow) Scan(dest ...any) error {
 			*d = r.values[i].(sql.NullInt32)
 		case *time.Time:
 			*d = r.values[i].(time.Time)
+		case *bool:
+			*d = r.values[i].(bool)
 		default:
 			return errors.New("unsupported scan destination")
 		}
@@ -275,6 +318,8 @@ func (r *fakeRows) Scan(dest ...any) error {
 			*d = current[i].(sql.NullInt32)
 		case *time.Time:
 			*d = current[i].(time.Time)
+		case *bool:
+			*d = current[i].(bool)
 		default:
 			return errors.New("unsupported scan destination")
 		}

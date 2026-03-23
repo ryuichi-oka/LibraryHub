@@ -459,6 +459,37 @@ func TestDeleteBook(t *testing.T) {
 	}
 }
 
+func TestDeleteBookReturnsConflictWhenRestricted(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandlerWithBooks(
+		fakeAuthService{
+			parseTokenFunc: func(token string) (auth.Claims, error) {
+				return auth.Claims{
+					UserID:    "admin-1",
+					Role:      "ADMIN",
+					ExpiresAt: time.Now().Add(time.Hour),
+				}, nil
+			},
+		},
+		fakeBookService{
+			deleteBookFunc: func(_ context.Context, _ string) error {
+				return books.ErrBookDeleteRestricted
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/books/book-1", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+}
+
 func TestUpdateBookReturnsNotFound(t *testing.T) {
 	t.Parallel()
 

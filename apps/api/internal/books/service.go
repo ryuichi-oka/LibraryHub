@@ -21,6 +21,9 @@ var ErrInvalidBookInput = errors.New("invalid book input")
 // ErrBookNotFound は対象書籍が存在しないときに返す。
 var ErrBookNotFound = errors.New("book not found")
 
+// ErrBookDeleteRestricted は関連データがあるため削除できないときに返す。
+var ErrBookDeleteRestricted = errors.New("book delete restricted")
+
 type dbQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -217,8 +220,17 @@ func (s *Service) DeleteBook(ctx context.Context, bookID string) error {
 		return ErrInvalidBookID
 	}
 
+	hasReservations, err := s.bookHasReservations(ctx, normalizedBookID)
+	if err != nil {
+		return err
+	}
+	// 予約履歴は履歴参照要件の対象なので、書籍削除で消さない。
+	if hasReservations {
+		return ErrBookDeleteRestricted
+	}
+
 	var deletedBookID string
-	err := s.db.QueryRow(ctx, `
+	err = s.db.QueryRow(ctx, `
 		DELETE FROM books
 		WHERE id = $1::uuid
 		RETURNING id::text
@@ -230,10 +242,32 @@ func (s *Service) DeleteBook(ctx context.Context, bookID string) error {
 		if isInvalidUUIDError(err) {
 			return ErrInvalidBookID
 		}
+		if isForeignKeyViolation(err) {
+			return ErrBookDeleteRestricted
+		}
 		return err
 	}
 
 	return nil
+}
+
+// bookHasReservations は対象書籍に予約履歴が存在するかを返す。
+func (s *Service) bookHasReservations(ctx context.Context, bookID string) (bool, error) {
+	var hasReservations bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM reservations
+			WHERE book_id = $1::uuid
+		)
+	`, bookID).Scan(&hasReservations)
+	if err != nil {
+		if isInvalidUUIDError(err) {
+			return false, ErrInvalidBookID
+		}
+		return false, err
+	}
+	return hasReservations, nil
 }
 
 type normalizedBookInput struct {
@@ -364,6 +398,15 @@ func isInvalidUUIDError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == "22P02"
+	}
+	return false
+}
+
+// isForeignKeyViolation は外部キー制約違反（23503）を判定する。
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23503"
 	}
 	return false
 }

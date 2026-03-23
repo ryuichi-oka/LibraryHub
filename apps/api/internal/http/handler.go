@@ -347,6 +347,8 @@ func (h *Handler) deleteBook(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid book id")
 		case books.ErrBookNotFound:
 			writeError(w, http.StatusNotFound, "book not found")
+		case books.ErrBookDeleteRestricted:
+			writeError(w, http.StatusConflict, "book cannot be deleted due to related histories")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
