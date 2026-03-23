@@ -10,11 +10,13 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"libraryhub/apps/api/internal/auth"
+	"libraryhub/apps/api/internal/books"
 )
 
 // Handler は認証関連エンドポイントを提供する HTTP ハンドラー。
 type Handler struct {
 	authService authService
+	bookService bookService
 }
 
 type authService interface {
@@ -25,13 +27,29 @@ type authService interface {
 	ListAdminUsers(ctx context.Context) ([]auth.AdminUser, error)
 }
 
+type bookService interface {
+	CreateBook(ctx context.Context, in books.CreateBookInput) (books.Book, error)
+	ListBooks(ctx context.Context) ([]books.Book, error)
+	GetBook(ctx context.Context, bookID string) (books.Book, error)
+	UpdateBook(ctx context.Context, in books.UpdateBookInput) (books.Book, error)
+	DeleteBook(ctx context.Context, bookID string) error
+}
+
 type contextKey string
 
 const authClaimsContextKey contextKey = "authClaims"
 
 // NewHandler は HTTP ルーティングで利用するハンドラーを生成する。
 func NewHandler(authService authService) *Handler {
-	return &Handler{authService: authService}
+	return NewHandlerWithBooks(authService, noopBookService{})
+}
+
+// NewHandlerWithBooks は auth/book サービスを注入したハンドラーを生成する。
+func NewHandlerWithBooks(authService authService, bookService bookService) *Handler {
+	return &Handler{
+		authService: authService,
+		bookService: bookService,
+	}
 }
 
 // Routes は API エンドポイントのルーティング定義を返す。
@@ -59,6 +77,17 @@ func (h *Handler) Routes() http.Handler {
 		r.Use(h.requireRoles("ADMIN"))
 		r.Get("/", h.listAdminUsers)
 		r.Post("/{userId}/status", h.updateUserStatus)
+	})
+
+	r.Route("/admin/books", func(r chi.Router) {
+		// 蔵書 CRUD は管理者操作のみ許可する。
+		r.Use(h.requireAuth)
+		r.Use(h.requireRoles("ADMIN"))
+		r.Post("/", h.createBook)
+		r.Get("/", h.listBooks)
+		r.Get("/{bookId}", h.getBook)
+		r.Patch("/{bookId}", h.updateBook)
+		r.Delete("/{bookId}", h.deleteBook)
 	})
 
 	return r
@@ -95,6 +124,16 @@ type loginRequest struct {
 
 type updateUserStatusRequest struct {
 	Status string `json:"status"`
+}
+
+type bookRequest struct {
+	Title         string  `json:"title"`
+	Author        string  `json:"author"`
+	ISBN          *string `json:"isbn"`
+	Publisher     *string `json:"publisher"`
+	PublishedYear *int    `json:"published_year"`
+	CategoryID    string  `json:"category_id"`
+	Location      *string `json:"location"`
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -197,6 +236,124 @@ func (h *Handler) updateUserStatus(w http.ResponseWriter, r *http.Request) {
 			"updated_at": result.UpdatedAt,
 		},
 	})
+}
+
+// createBook は管理者による蔵書新規登録を受け付ける。
+func (h *Handler) createBook(w http.ResponseWriter, r *http.Request) {
+	var req bookRequest
+	// 入力 JSON が壊れている場合は業務処理に進めない。
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	book, err := h.bookService.CreateBook(r.Context(), books.CreateBookInput{
+		Title:         req.Title,
+		Author:        req.Author,
+		ISBN:          req.ISBN,
+		Publisher:     req.Publisher,
+		PublishedYear: req.PublishedYear,
+		CategoryID:    req.CategoryID,
+		Location:      req.Location,
+	})
+	if err != nil {
+		switch err {
+		case books.ErrInvalidBookInput:
+			writeError(w, http.StatusBadRequest, "invalid book input")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"book": book})
+}
+
+// listBooks は管理者向け蔵書一覧を返す。
+func (h *Handler) listBooks(w http.ResponseWriter, r *http.Request) {
+	items, err := h.bookService.ListBooks(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"books": items})
+}
+
+// getBook は管理者向けの蔵書詳細を返す。
+func (h *Handler) getBook(w http.ResponseWriter, r *http.Request) {
+	bookID := chi.URLParam(r, "bookId")
+
+	book, err := h.bookService.GetBook(r.Context(), bookID)
+	if err != nil {
+		switch err {
+		case books.ErrInvalidBookID:
+			writeError(w, http.StatusBadRequest, "invalid book id")
+		case books.ErrBookNotFound:
+			writeError(w, http.StatusNotFound, "book not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"book": book})
+}
+
+// updateBook は管理者による蔵書編集を受け付ける。
+func (h *Handler) updateBook(w http.ResponseWriter, r *http.Request) {
+	bookID := chi.URLParam(r, "bookId")
+
+	var req bookRequest
+	// 入力 JSON が壊れている場合は業務処理に進めない。
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	book, err := h.bookService.UpdateBook(r.Context(), books.UpdateBookInput{
+		BookID:        bookID,
+		Title:         req.Title,
+		Author:        req.Author,
+		ISBN:          req.ISBN,
+		Publisher:     req.Publisher,
+		PublishedYear: req.PublishedYear,
+		CategoryID:    req.CategoryID,
+		Location:      req.Location,
+	})
+	if err != nil {
+		switch err {
+		case books.ErrInvalidBookID:
+			writeError(w, http.StatusBadRequest, "invalid book id")
+		case books.ErrInvalidBookInput:
+			writeError(w, http.StatusBadRequest, "invalid book input")
+		case books.ErrBookNotFound:
+			writeError(w, http.StatusNotFound, "book not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"book": book})
+}
+
+// deleteBook は管理者による蔵書削除を実行する。
+func (h *Handler) deleteBook(w http.ResponseWriter, r *http.Request) {
+	bookID := chi.URLParam(r, "bookId")
+
+	err := h.bookService.DeleteBook(r.Context(), bookID)
+	if err != nil {
+		switch err {
+		case books.ErrInvalidBookID:
+			writeError(w, http.StatusBadRequest, "invalid book id")
+		case books.ErrBookNotFound:
+			writeError(w, http.StatusNotFound, "book not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // isSameUserID は UUID の表記ゆれを吸収して同一ユーザーかを判定する。
@@ -310,4 +467,26 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+type noopBookService struct{}
+
+func (noopBookService) CreateBook(context.Context, books.CreateBookInput) (books.Book, error) {
+	return books.Book{}, books.ErrInvalidBookInput
+}
+
+func (noopBookService) ListBooks(context.Context) ([]books.Book, error) {
+	return []books.Book{}, nil
+}
+
+func (noopBookService) GetBook(context.Context, string) (books.Book, error) {
+	return books.Book{}, books.ErrBookNotFound
+}
+
+func (noopBookService) UpdateBook(context.Context, books.UpdateBookInput) (books.Book, error) {
+	return books.Book{}, books.ErrBookNotFound
+}
+
+func (noopBookService) DeleteBook(context.Context, string) error {
+	return books.ErrBookNotFound
 }
