@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"libraryhub/apps/api/internal/auth"
+	"libraryhub/apps/api/internal/books"
 	"libraryhub/apps/api/internal/config"
 	"libraryhub/apps/api/internal/db"
 	httpapi "libraryhub/apps/api/internal/http"
@@ -30,7 +31,8 @@ func main() {
 	defer pool.Close()
 
 	authService := auth.NewService(pool, cfg.JWTSecret, cfg.JWTExpiresIn)
-	handler := httpapi.NewHandler(authService)
+	bookService := books.NewService(pool)
+	handler := httpapi.NewHandlerWithBooks(authService, bookService)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"libraryhub/apps/api/internal/auth"
+	"libraryhub/apps/api/internal/books"
 )
 
 func TestRequireAuthAllowsAccessToMe(t *testing.T) {
@@ -371,6 +372,156 @@ func TestLoginInactiveUserReturnsForbidden(t *testing.T) {
 	}
 }
 
+func TestCreateBook(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandlerWithBooks(
+		fakeAuthService{
+			parseTokenFunc: func(token string) (auth.Claims, error) {
+				return auth.Claims{
+					UserID:    "admin-1",
+					Role:      "ADMIN",
+					ExpiresAt: time.Now().Add(time.Hour),
+				}, nil
+			},
+		},
+		fakeBookService{
+			createBookFunc: func(_ context.Context, in books.CreateBookInput) (books.Book, error) {
+				if got, want := in.Title, "Clean Code"; got != want {
+					t.Fatalf("title = %q, want %q", got, want)
+				}
+				return books.Book{
+					BookID:     "book-1",
+					Title:      in.Title,
+					Author:     in.Author,
+					CategoryID: in.CategoryID,
+				}, nil
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/books", strings.NewReader(`{"title":"Clean Code","author":"Robert C. Martin","category_id":"cat-1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusCreated)
+	}
+
+	var body struct {
+		Book struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"book"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Book.ID != "book-1" {
+		t.Fatalf("book.id = %q, want %q", body.Book.ID, "book-1")
+	}
+}
+
+func TestDeleteBook(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandlerWithBooks(
+		fakeAuthService{
+			parseTokenFunc: func(token string) (auth.Claims, error) {
+				return auth.Claims{
+					UserID:    "admin-1",
+					Role:      "ADMIN",
+					ExpiresAt: time.Now().Add(time.Hour),
+				}, nil
+			},
+		},
+		fakeBookService{
+			deleteBookFunc: func(_ context.Context, bookID string) error {
+				if got, want := bookID, "book-1"; got != want {
+					t.Fatalf("book id = %q, want %q", got, want)
+				}
+				return nil
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/books/book-1", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+}
+
+func TestDeleteBookReturnsConflictWhenRestricted(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandlerWithBooks(
+		fakeAuthService{
+			parseTokenFunc: func(token string) (auth.Claims, error) {
+				return auth.Claims{
+					UserID:    "admin-1",
+					Role:      "ADMIN",
+					ExpiresAt: time.Now().Add(time.Hour),
+				}, nil
+			},
+		},
+		fakeBookService{
+			deleteBookFunc: func(_ context.Context, _ string) error {
+				return books.ErrBookDeleteRestricted
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/books/book-1", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusConflict)
+	}
+}
+
+func TestUpdateBookReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandlerWithBooks(
+		fakeAuthService{
+			parseTokenFunc: func(token string) (auth.Claims, error) {
+				return auth.Claims{
+					UserID:    "admin-1",
+					Role:      "ADMIN",
+					ExpiresAt: time.Now().Add(time.Hour),
+				}, nil
+			},
+		},
+		fakeBookService{
+			updateBookFunc: func(_ context.Context, _ books.UpdateBookInput) (books.Book, error) {
+				return books.Book{}, books.ErrBookNotFound
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodPatch, "/admin/books/book-404", strings.NewReader(`{"title":"x","author":"y","category_id":"cat-1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNotFound)
+	}
+}
+
 func TestUpdateUserStatusRejectsOwnAccount(t *testing.T) {
 	t.Parallel()
 
@@ -495,4 +646,47 @@ func (s fakeAuthService) ListAdminUsers(ctx context.Context) ([]auth.AdminUser, 
 		return nil, errors.New("unexpected list admin users")
 	}
 	return s.listAdminUsersFunc(ctx)
+}
+
+type fakeBookService struct {
+	createBookFunc func(ctx context.Context, in books.CreateBookInput) (books.Book, error)
+	listBooksFunc  func(ctx context.Context) ([]books.Book, error)
+	getBookFunc    func(ctx context.Context, bookID string) (books.Book, error)
+	updateBookFunc func(ctx context.Context, in books.UpdateBookInput) (books.Book, error)
+	deleteBookFunc func(ctx context.Context, bookID string) error
+}
+
+func (s fakeBookService) CreateBook(ctx context.Context, in books.CreateBookInput) (books.Book, error) {
+	if s.createBookFunc == nil {
+		return books.Book{}, errors.New("unexpected create book")
+	}
+	return s.createBookFunc(ctx, in)
+}
+
+func (s fakeBookService) ListBooks(ctx context.Context) ([]books.Book, error) {
+	if s.listBooksFunc == nil {
+		return nil, errors.New("unexpected list books")
+	}
+	return s.listBooksFunc(ctx)
+}
+
+func (s fakeBookService) GetBook(ctx context.Context, bookID string) (books.Book, error) {
+	if s.getBookFunc == nil {
+		return books.Book{}, errors.New("unexpected get book")
+	}
+	return s.getBookFunc(ctx, bookID)
+}
+
+func (s fakeBookService) UpdateBook(ctx context.Context, in books.UpdateBookInput) (books.Book, error) {
+	if s.updateBookFunc == nil {
+		return books.Book{}, errors.New("unexpected update book")
+	}
+	return s.updateBookFunc(ctx, in)
+}
+
+func (s fakeBookService) DeleteBook(ctx context.Context, bookID string) error {
+	if s.deleteBookFunc == nil {
+		return errors.New("unexpected delete book")
+	}
+	return s.deleteBookFunc(ctx, bookID)
 }
